@@ -59,7 +59,7 @@ const PostEdit = () => {
             return;
         }
 
-        alert("게시글이 수정되었습니다.");
+        // alert("게시글이 수정되었습니다.");
         navigate(`/posts/${id}`);
     };
 
