@@ -1,6 +1,6 @@
 import React, { Component } from "react";
 import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { setCredentials, clearAuth } from "./feat/authSlice";
 
@@ -14,7 +14,24 @@ import PostCreate from "./PostCreate";
 import PostEdit from "./PostEdit"
 import Mypage from "./Mypage";
 import Error from "./Error";
+import AnalyticsDashboard from "./AnalyticsDashboard";
 import "./css/App.css";
+import AnalyticsSDK from "./analytics";
+
+// 라우팅 이벤트 추적을 위한 컴포넌트
+function RouteTracker() {
+    const location = useLocation();
+    
+    useEffect(() => {
+        AnalyticsSDK.sendEvent('page_view', {
+            path: location.pathname,
+            search: location.search,
+            hash: location.hash
+        });
+    }, [location]);
+
+    return null;
+}
 
 function App() {
     const dispatch = useDispatch();
@@ -23,6 +40,10 @@ function App() {
             .then((res) => res.json())
             .then((data) => {
             if (data.accessToken) {
+                AnalyticsSDK.sendEvent('user_session_restored', {
+                    user_id: data.id,
+                    username: data.username
+                });
                 dispatch(setCredentials({
                     accessToken: data.accessToken,
                     username: data.username,
@@ -30,16 +51,19 @@ function App() {
                     name: data.name,
                 }));
             } else {
+                AnalyticsSDK.sendEvent('user_session_expired');
                 dispatch(clearAuth());
             }
         })
         .catch(() => {
+            AnalyticsSDK.sendEvent('user_session_error');
             dispatch(clearAuth());
         });
     }, []);
 
     return (
         <BrowserRouter>
+            <RouteTracker />
             <Header />
             <main>
                 <Routes>
@@ -53,6 +77,7 @@ function App() {
                         <Route path="/mypage" element={<Mypage />} />
                     </Route>
                     <Route path="/posts/:id/edit" element={<PostEdit />} />
+                    <Route path="/analytics" element={<AnalyticsDashboard />} />
                     <Route path="*" element={<Error />} />
                 </Routes>
             </main>

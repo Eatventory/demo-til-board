@@ -130,3 +130,7 @@ app.use("/api/posts", commentRoutes);
 /* 마이페이지 기능 */
 const mypageRoutes = require("./routes/mypage");
 app.use("/api/mypage", mypageRoutes);
+
+/* Analytics 기능 */
+const analyticsRoutes = require("./routes/analytics");
+app.use("/api/analytics", analyticsRoutes);

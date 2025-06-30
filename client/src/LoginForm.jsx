@@ -5,6 +5,7 @@ import { setCredentials } from "./feat/authSlice";
 import { motion, AnimatePresence } from "framer-motion";
 import whiteLogo from "./assets/logo-white.png";
 import "./css/LoginForm.css";
+import AnalyticsSDK from "./analytics";
 
 function LoginForm() {
     const location = useLocation();
@@ -55,12 +56,23 @@ function LoginForm() {
         if (isSignup) {
             if (!usernameForm.test(username)) {
                 setFunc(false, false, true, false);
+                AnalyticsSDK.sendEvent('signup_validation_error', {
+                    error_type: 'username_format',
+                    username: username
+                });
                 return;
             }
             if (!pwForm.test(password)) {
                 setFunc(false, false, false, true);
+                AnalyticsSDK.sendEvent('signup_validation_error', {
+                    error_type: 'password_format'
+                });
                 return;
             }
+            AnalyticsSDK.sendEvent('signup_attempt', {
+                username: username,
+                name: name
+            });
             fetch("/api/sign-up", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -70,18 +82,37 @@ function LoginForm() {
                 .then(({ status }) => {
                     if (status === 201) {
                         setFunc(false, false, false, false);
+                        AnalyticsSDK.sendEvent('signup_success', {
+                            username: username,
+                            name: name
+                        });
                         alert("회원가입이 완료되었습니다. 로그인 해주세요.");
                         navigate("/login");
                     } else if (status === 400) {
                         setFunc(false, true, false, false);
+                        AnalyticsSDK.sendEvent('signup_error', {
+                            error_type: 'password_mismatch',
+                            username: username
+                        });
                     } else if (status === 409) {
                         setFunc(true, false, false, false);
+                        AnalyticsSDK.sendEvent('signup_error', {
+                            error_type: 'username_exists',
+                            username: username
+                        });
                     } else {
                         setFunc(false, false, false, false);
+                        AnalyticsSDK.sendEvent('signup_error', {
+                            error_type: 'server_error',
+                            username: username
+                        });
                         alert("회원가입 실패");
                     }
                 });
         } else {
+            AnalyticsSDK.sendEvent('login_attempt', {
+                username: username
+            });
             fetch("/api/log-in", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -90,6 +121,10 @@ function LoginForm() {
                 .then((res) => res.json().then((data) => ({ status: res.status, data })))
                 .then(({ status, data }) => {
                     if (status === 200) {
+                        AnalyticsSDK.sendEvent('login_success', {
+                            username: data.username,
+                            user_id: data.id
+                        });
                         dispatch(setCredentials({
                             accessToken: data.accessToken,
                             username: data.username,
@@ -99,9 +134,35 @@ function LoginForm() {
                         navigate("/");
                     } else {
                         setLoginCheck(true);
+                        AnalyticsSDK.sendEvent('login_error', {
+                            username: username,
+                            error_type: 'invalid_credentials'
+                        });
                     }
                 });
         }
+    };
+
+    const handleAboutButtonClick = () => {
+        if (isAbout) {
+            AnalyticsSDK.sendEvent('about_cta_click', {
+                user_logged_in: isLoggedIn,
+                action: isLoggedIn ? 'write_post' : 'signup'
+            });
+            navigate(isLoggedIn ? "/posts/new" : "/signup");
+        }
+    };
+
+    const handleLoginLinkClick = () => {
+        AnalyticsSDK.sendEvent('login_link_click', {
+            from_page: 'signup'
+        });
+    };
+
+    const handleSignupLinkClick = () => {
+        AnalyticsSDK.sendEvent('signup_link_click', {
+            from_page: 'login'
+        });
     };
 
     return (
@@ -169,11 +230,7 @@ function LoginForm() {
                     <button
                         type={isAbout ? "button" : "submit"}
                         className="login_button"
-                        onClick={() => {
-                            if (isAbout) {
-                                navigate(isLoggedIn ? "/posts/new" : "/signup");
-                            }
-                        }}
+                        onClick={handleAboutButtonClick}
                         style={isAbout ? { marginBottom: "0" } : {}}
                     >
                         {isAbout
@@ -188,9 +245,9 @@ function LoginForm() {
                     {!isAbout && (
                         <div className="login_register">
                             {isSignup ? (
-                                <>이미 계정이 있으신가요? <Link to="/login">로그인</Link></>
+                                <>이미 계정이 있으신가요? <Link to="/login" onClick={handleLoginLinkClick}>로그인</Link></>
                             ) : (
-                                <>아직 회원이 아니신가요? <Link to="/signup">회원가입</Link></>
+                                <>아직 회원이 아니신가요? <Link to="/signup" onClick={handleSignupLinkClick}>회원가입</Link></>
                             )}
                         </div>
                     )}
@@ -201,3 +258,5 @@ function LoginForm() {
 }
 
 export default LoginForm;
+
+

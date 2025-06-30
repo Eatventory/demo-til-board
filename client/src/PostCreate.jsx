@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import MarkdownEditor from "./MarkdownEditor";
+import AnalyticsSDK from "./analytics";
 
 const PostCreate = () => {
     const [title, setTitle] = useState("");
@@ -13,9 +14,20 @@ const PostCreate = () => {
 
     const handleSubmit = async () => {
         if (!title.trim() || !content.trim()) {
+            AnalyticsSDK.sendEvent('post_create_validation_error', {
+                missing_title: !title.trim(),
+                missing_content: !content.trim()
+            });
             alert("제목과 내용을 모두 입력하세요.");
             return;
         }
+
+        AnalyticsSDK.sendEvent('post_create_attempt', {
+            title_length: title.length,
+            content_length: content.length,
+            tags_count: tags.split(",").map((tag) => tag.trim()).filter(Boolean).length,
+            author_id: authorId
+        });
 
         const res = await fetch("/api/posts", {
             method: "POST",
@@ -30,12 +42,33 @@ const PostCreate = () => {
 
         if (!res.ok) {
             const err = await res.json();
+            AnalyticsSDK.sendEvent('post_create_error', {
+                error: err.error,
+                title_length: title.length,
+                content_length: content.length
+            });
             alert("작성 실패: " + err.error);
             return;
         }
 
         const { id } = await res.json();
+        AnalyticsSDK.sendEvent('post_create_success', {
+            post_id: id,
+            title_length: title.length,
+            content_length: content.length,
+            tags_count: tags.split(",").map((tag) => tag.trim()).filter(Boolean).length,
+            author_id: authorId
+        });
         navigate(`/posts/${id}`);
+    };
+
+    const handleCancelClick = () => {
+        AnalyticsSDK.sendEvent('post_create_cancel', {
+            title_length: title.length,
+            content_length: content.length,
+            has_content: content.trim().length > 0
+        });
+        navigate("/");
     };
 
     return (
@@ -58,7 +91,7 @@ const PostCreate = () => {
             <div style={{ marginTop: "1rem" }}>
                 <button onClick={handleSubmit}>저장</button>
                 <button
-                    onClick={() => navigate("/")}
+                    onClick={handleCancelClick}
                     style={{ marginLeft: "8px" }}
                 >
                     취소

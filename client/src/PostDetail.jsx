@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import deletePost from "./app/deletePost";
+import AnalyticsSDK from "./analytics";
 
 const PostDetail = () => {
     const navigate = useNavigate();
@@ -22,14 +23,24 @@ const PostDetail = () => {
     useEffect(() => {
         fetch(`/api/posts/${id}`)
             .then((res) => res.json())
-            .then((data) => setPost(data));
+            .then((data) => {
+                setPost(data);
+                AnalyticsSDK.sendEvent('post_detail_view', {
+                    post_id: id,
+                    post_title: data.title,
+                    post_author: data.author,
+                    post_author_id: data.author_id,
+                    viewer_id: authorId,
+                    is_author: data.author_id === authorId
+                });
+            });
         fetch(`/api/posts/${id}/comments`)
             .then((res) => res.json())
             .then((data) => setComments(data));
         fetch(`/api/posts/${id}/tags`)
             .then(res => res.json())
             .then(setTags);
-    }, [id]);
+    }, [id, authorId]);
 
     if (!post) return <div>로딩 중…</div>;
     const isAuthor = post.author_id === authorId;
@@ -37,6 +48,12 @@ const PostDetail = () => {
 
     const handleCommentSubmit = async () => {
         if (!commentInput.trim()) return;
+
+        AnalyticsSDK.sendEvent('comment_submit_attempt', {
+            post_id: id,
+            comment_length: commentInput.length,
+            author_id: authorId
+        });
 
         await fetch(`/api/posts/${id}/comments`, {
             method: "POST",
@@ -54,14 +71,33 @@ const PostDetail = () => {
         const res = await fetch(`/api/posts/${id}/comments`);
         const data = await res.json();
         setComments(data);
+        
+        AnalyticsSDK.sendEvent('comment_submit_success', {
+            post_id: id,
+            comment_length: commentInput.length,
+            author_id: authorId
+        });
     };
 
     const startEdit = (comment) => {
+        AnalyticsSDK.sendEvent('comment_edit_start', {
+            post_id: id,
+            comment_id: comment.id,
+            comment_author: comment.author,
+            author_id: authorId
+        });
         setEditingCommentId(comment.id);
         setEditingContent(comment.content);
     };
 
     const handleEditSave = async (commentId) => {
+        AnalyticsSDK.sendEvent('comment_edit_save', {
+            post_id: id,
+            comment_id: commentId,
+            new_content_length: editingContent.length,
+            author_id: authorId
+        });
+
         await fetch(`/api/posts/comments/${commentId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -78,6 +114,12 @@ const PostDetail = () => {
     const handleDeleteComments = async (commentId) => {
         const ok = window.confirm("정말 삭제하시겠습니까?");
         if (!ok) return;
+
+        AnalyticsSDK.sendEvent('comment_delete', {
+            post_id: id,
+            comment_id: commentId,
+            author_id: authorId
+        });
 
         await fetch(`/api/posts/comments/${commentId}`, {
             method: "DELETE",
@@ -100,19 +142,59 @@ const PostDetail = () => {
         );
         if (!ok) return;
 
+        AnalyticsSDK.sendEvent('post_delete_attempt', {
+            post_id: id,
+            post_title: post.title,
+            author_id: authorId
+        });
+
         try {
             await deletePost(post.id, authorId);
+            AnalyticsSDK.sendEvent('post_delete_success', {
+                post_id: id,
+                post_title: post.title,
+                author_id: authorId
+            });
             alert("삭제가 완료되었습니다.");
             navigate("/");
         } catch (err) {
+            AnalyticsSDK.sendEvent('post_delete_error', {
+                post_id: id,
+                post_title: post.title,
+                author_id: authorId,
+                error: err.message
+            });
             alert("삭제에 실패했습니다.");
         }
+    };
+
+    const handleBackToListClick = () => {
+        AnalyticsSDK.sendEvent('post_detail_back_to_list', {
+            post_id: id,
+            post_title: post.title
+        });
+    };
+
+    const handleEditPostClick = () => {
+        AnalyticsSDK.sendEvent('post_edit_click', {
+            post_id: id,
+            post_title: post.title,
+            author_id: authorId
+        });
+    };
+
+    const handleTagClick = (tagName) => {
+        AnalyticsSDK.sendEvent('post_detail_tag_click', {
+            post_id: id,
+            post_title: post.title,
+            tag_name: tagName
+        });
     };
 
     return (
         <div className="board-wrapper" style={{ paddingTop: "80px", paddingBottom: "80px" }}>
             <div style={{ textAlign: "left" }}>
-                <Link to="/"><small>← 목록으로 돌아가기</small></Link>
+                <Link to="/" onClick={handleBackToListClick}><small>← 목록으로 돌아가기</small></Link>
             </div>
             <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
@@ -123,7 +205,7 @@ const PostDetail = () => {
                 </div>
                 {isAuthor && (
                     <div style={{ display: "flex", flexDirection:"row", gap:"0.5rem" }}>
-                        <Link to={`/posts/${post.id}/edit`}><button style={{ whiteSpace: "nowrap" }}>게시글 수정</button></Link>
+                        <Link to={`/posts/${post.id}/edit`} onClick={handleEditPostClick}><button style={{ whiteSpace: "nowrap" }}>게시글 수정</button></Link>
                         <button style={{ whiteSpace: "nowrap" }} onClick={handleDeletePost}>게시글 삭제</button>
                     </div>
                 )}
@@ -182,7 +264,7 @@ const PostDetail = () => {
                                 fontSize: "0.9rem",
                             }}
                         >
-                            <Link to={`/?tag=${tag.name}`} style={{ textDecoration: "none", color: "#007bff" }}>
+                            <Link to={`/?tag=${tag.name}`} onClick={() => handleTagClick(tag.name)} style={{ textDecoration: "none", color: "#007bff" }}>
                                 #{tag.name}
                             </Link>
                         </span>
